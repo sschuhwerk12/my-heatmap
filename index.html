@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Asset Intelligence Workbench</title>
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+      crossorigin=""
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>Asset Intelligence Workbench</h1>
+      <p>
+        Rapid underwriting view for address-level demographic, competitive, and market context.
+      </p>
+    </header>
+
+    <main>
+      <section class="card input-card">
+        <h2>1) Subject Asset</h2>
+        <form id="asset-form">
+          <label>
+            Address
+            <input id="address" type="text" placeholder="e.g., 7900 Westpark Dr, McLean, VA" required />
+          </label>
+
+          <div class="grid-two">
+            <label>
+              Asset Type
+              <select id="asset-type" required>
+                <option value="Industrial">Industrial</option>
+                <option value="Office">Office</option>
+                <option value="Retail">Retail</option>
+                <option value="Multifamily">Multifamily</option>
+              </select>
+            </label>
+
+            <label>
+              Building Size (SF)
+              <input id="square-feet" type="number" min="1000" step="100" value="50000" required />
+            </label>
+          </div>
+
+          <h3>Competitive Filters</h3>
+          <div class="grid-three">
+            <label>
+              Min Clear Height (ft)
+              <input id="min-clear-height" type="number" min="0" step="1" value="24" />
+            </label>
+            <label>
+              Year Built Min
+              <input id="year-built-min" type="number" min="1900" max="2030" value="1995" />
+            </label>
+            <label>
+              Year Built Max
+              <input id="year-built-max" type="number" min="1900" max="2030" value="2025" />
+            </label>
+          </div>
+
+          <button type="submit">Analyze Asset</button>
+          <p id="status" class="status"></p>
+        </form>
+        <p class="source-note"><strong>Data source:</strong> User-entered inputs and OpenStreetMap Nominatim geocoding API.</p>
+      </section>
+
+      <section class="card map-card">
+        <h2>Map</h2>
+        <div id="map" aria-label="Map of subject asset and nearby comparables"></div>
+        <p class="fineprint">
+          Radius overlays show 2/5/10 miles and a proxy 20-minute drive-time ring (assumes avg 35 mph).
+        </p>
+        <p class="source-note"><strong>Data source:</strong> OpenStreetMap tiles + Leaflet rendering + geocoded subject coordinates.</p>
+      </section>
+
+      <section class="card">
+        <h2>2) Demographics by Radius</h2>
+        <div id="demographics"></div>
+        <p class="source-note"><strong>Data source:</strong> Modeled demographic estimates generated in-app from subject coordinates (placeholder for third-party demographic APIs).</p>
+      </section>
+
+      <section class="card">
+        <h2>3) Competitive Product (5-mile, ±50% SF)</h2>
+        <div id="comps-summary"></div>
+        <div class="table-wrap">
+          <table id="comps-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>SF</th>
+                <th>Clear Height</th>
+                <th>Year Built</th>
+                <th>Distance (mi)</th>
+                <th>Ask Rent</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="source-note"><strong>Data source:</strong> Candidate locations from local <code>Heatmap.json</code>; property attributes are modeled placeholders filtered by your inputs.</p>
+      </section>
+
+      <section class="card">
+        <h2>4) Market Stats</h2>
+        <div id="market-stats" class="grid-three"></div>
+        <p class="source-note"><strong>Data source:</strong> Derived from modeled comparable set outputs and asset-type assumptions in app logic.</p>
+      </section>
+
+      <section class="card">
+        <h2>5) Proximity to Major Routes</h2>
+        <ul id="routes"></ul>
+        <p class="source-note"><strong>Data source:</strong> Dynamic major-route candidates are queried from OpenStreetMap Overpass API and distances are calculated in-app using Haversine formulas.</p>
+      </section>
+
+      <section class="card">
+        <h2>6) Investment Summary</h2>
+        <div id="summary" class="summary"></div>
+        <p class="source-note"><strong>Data source:</strong> Generated narrative based on sections 2-5 plus static MSA macro commentary template.</p>
+      </section>
+    </main>
+
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+      crossorigin=""
+    ></script>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>
