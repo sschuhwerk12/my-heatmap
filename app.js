@@ -309,11 +309,15 @@ function renderRouteDistances(subject) {
   routesEl.innerHTML = `<li class="muted">Subject: ${subject.displayName}</li>${ranked
     .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
     .join('')}`;
+  routesEl.innerHTML = ranked
+    .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
+    .join('');
 
   return ranked;
 }
 
 function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF, subject }) {
+function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF }) {
   const closeRoutes = routes.slice(0, 2).map((r) => r.name).join(' and ');
   const fiveMile = demographics.find((d) => d.ring.includes('5-mile'));
   const incomeSignal = fiveMile.medianIncome > 90000 ? 'strong household purchasing power' : 'moderate household purchasing power';
@@ -346,6 +350,7 @@ async function handleSubmit(event) {
   statusEl.textContent = 'Analyzing...';
   submitButtonEl.disabled = true;
   clearOutputPanels();
+  statusEl.textContent = 'Analyzing...';
 
   try {
     const address = document.querySelector('#address').value.trim();
@@ -373,6 +378,7 @@ async function handleSubmit(event) {
 
     const marketStats = buildMarketStats(comps, assetType);
     renderMarketStats(marketStats, assetType, subject);
+    renderMarketStats(marketStats, assetType);
 
     const routes = renderRouteDistances(subject);
 
@@ -384,6 +390,7 @@ async function handleSubmit(event) {
       routes,
       subjectSF,
       subject
+      subjectSF
     });
 
     statusEl.textContent = `Analysis complete for ${subject.displayName}.`;
@@ -395,6 +402,7 @@ async function handleSubmit(event) {
     if (requestId === activeRequestId) {
       submitButtonEl.disabled = false;
     }
+    statusEl.textContent = error.message;
   }
 }
 
