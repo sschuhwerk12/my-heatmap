@@ -153,3 +153,19 @@ th {
 .summary p {
   margin: 0.2rem 0 0.5rem;
 }
+
+
+.source-note {
+  margin-top: 0.65rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.55rem;
+}
+
+.source-note code {
+  background: #eef3ff;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0 0.25rem;
+}

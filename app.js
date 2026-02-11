@@ -6,6 +6,10 @@ const compsBodyEl = document.querySelector('#comps-table tbody');
 const marketStatsEl = document.querySelector('#market-stats');
 const routesEl = document.querySelector('#routes');
 const summaryEl = document.querySelector('#summary');
+const submitButtonEl = form.querySelector('button[type="submit"]');
+
+let activeRequestId = 0;
+let heatmapPointsPromise;
 
 const milesToMeters = (miles) => miles * 1609.34;
 const metersToMiles = (meters) => meters / 1609.34;
@@ -93,9 +97,19 @@ async function geocode(address) {
 }
 
 async function loadHeatmapPoints() {
-  const res = await fetch('./Heatmap.json');
-  const data = await res.json();
-  return data;
+  if (!heatmapPointsPromise) {
+    heatmapPointsPromise = fetch('./Heatmap.json').then((res) => res.json());
+  }
+  return heatmapPointsPromise;
+}
+
+function clearOutputPanels() {
+  demographicsEl.innerHTML = '';
+  compsSummaryEl.textContent = '';
+  compsBodyEl.innerHTML = '';
+  marketStatsEl.innerHTML = '';
+  routesEl.innerHTML = '';
+  summaryEl.innerHTML = '';
 }
 
 function clearMapLayers() {
@@ -262,9 +276,13 @@ function buildMarketStats(comps, assetType) {
   };
 }
 
-function renderMarketStats(stats, assetType) {
+function renderMarketStats(stats, assetType, subject) {
   const unit = assetType === 'Multifamily' ? '$/SF/mo' : '$/SF/yr';
   marketStatsEl.innerHTML = `
+    <div class="kpi" style="grid-column: 1 / -1;">
+      <div class="label">Subject analyzed</div>
+      <div class="value" style="font-size:1rem;">${subject.displayName}</div>
+    </div>
     <div class="kpi">
       <div class="label">Vacancy rate</div>
       <div class="value">${(stats.vacancyRate * 100).toFixed(1)}%</div>
@@ -288,6 +306,9 @@ function renderRouteDistances(subject) {
     }))
     .sort((a, b) => a.distance - b.distance);
 
+  routesEl.innerHTML = `<li class="muted">Subject: ${subject.displayName}</li>${ranked
+    .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
+    .join('')}`;
   routesEl.innerHTML = ranked
     .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
     .join('');
@@ -295,6 +316,7 @@ function renderRouteDistances(subject) {
   return ranked;
 }
 
+function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF, subject }) {
 function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF }) {
   const closeRoutes = routes.slice(0, 2).map((r) => r.name).join(' and ');
   const fiveMile = demographics.find((d) => d.ring.includes('5-mile'));
@@ -302,6 +324,7 @@ function renderSummary({ assetType, demographics, comps, marketStats, routes, su
   const vacancySignal = marketStats.vacancyRate < 0.08 ? 'tight' : marketStats.vacancyRate < 0.14 ? 'balanced' : 'soft';
 
   summaryEl.innerHTML = `
+    <p class="muted"><strong>Analyzed location:</strong> ${subject.displayName}</p>
     <p>
       The ${subjectSF.toLocaleString()} SF ${assetType.toLowerCase()} asset sits in a trade area with ${incomeSignal}, with median household income of
       approximately $${fiveMile.medianIncome.toLocaleString()} in the 5-mile band.
@@ -323,6 +346,10 @@ function renderSummary({ assetType, demographics, comps, marketStats, routes, su
 
 async function handleSubmit(event) {
   event.preventDefault();
+  const requestId = ++activeRequestId;
+  statusEl.textContent = 'Analyzing...';
+  submitButtonEl.disabled = true;
+  clearOutputPanels();
   statusEl.textContent = 'Analyzing...';
 
   try {
@@ -336,6 +363,9 @@ async function handleSubmit(event) {
     };
 
     const [subject, rawPoints] = await Promise.all([geocode(address), loadHeatmapPoints()]);
+    if (requestId !== activeRequestId) {
+      return;
+    }
 
     drawSubjectAndRings(subject, assetType);
 
@@ -347,6 +377,7 @@ async function handleSubmit(event) {
     plotCompsOnMap(comps);
 
     const marketStats = buildMarketStats(comps, assetType);
+    renderMarketStats(marketStats, assetType, subject);
     renderMarketStats(marketStats, assetType);
 
     const routes = renderRouteDistances(subject);
@@ -357,11 +388,20 @@ async function handleSubmit(event) {
       comps,
       marketStats,
       routes,
+      subjectSF,
+      subject
       subjectSF
     });
 
     statusEl.textContent = `Analysis complete for ${subject.displayName}.`;
   } catch (error) {
+    if (requestId === activeRequestId) {
+      statusEl.textContent = error.message;
+    }
+  } finally {
+    if (requestId === activeRequestId) {
+      submitButtonEl.disabled = false;
+    }
     statusEl.textContent = error.message;
   }
 }

@@ -65,6 +65,7 @@
           <button type="submit">Analyze Asset</button>
           <p id="status" class="status"></p>
         </form>
+        <p class="source-note"><strong>Data source:</strong> User-entered inputs and OpenStreetMap Nominatim geocoding API.</p>
       </section>
 
       <section class="card map-card">
@@ -73,11 +74,13 @@
         <p class="fineprint">
           Radius overlays show 2/5/10 miles and a proxy 20-minute drive-time ring (assumes avg 35 mph).
         </p>
+        <p class="source-note"><strong>Data source:</strong> OpenStreetMap tiles + Leaflet rendering + geocoded subject coordinates.</p>
       </section>
 
       <section class="card">
         <h2>2) Demographics by Radius</h2>
         <div id="demographics"></div>
+        <p class="source-note"><strong>Data source:</strong> Modeled demographic estimates generated in-app from subject coordinates (placeholder for third-party demographic APIs).</p>
       </section>
 
       <section class="card">
@@ -99,21 +102,25 @@
             <tbody></tbody>
           </table>
         </div>
+        <p class="source-note"><strong>Data source:</strong> Candidate locations from local <code>Heatmap.json</code>; property attributes are modeled placeholders filtered by your inputs.</p>
       </section>
 
       <section class="card">
         <h2>4) Market Stats</h2>
         <div id="market-stats" class="grid-three"></div>
+        <p class="source-note"><strong>Data source:</strong> Derived from modeled comparable set outputs and asset-type assumptions in app logic.</p>
       </section>
 
       <section class="card">
         <h2>5) Proximity to Major Routes</h2>
         <ul id="routes"></ul>
+        <p class="source-note"><strong>Data source:</strong> Distances are calculated in-app using Haversine formulas from the subject to predefined major-route coordinates.</p>
       </section>
 
       <section class="card">
         <h2>6) Investment Summary</h2>
         <div id="summary" class="summary"></div>
+        <p class="source-note"><strong>Data source:</strong> Generated narrative based on sections 2-5 plus static MSA macro commentary template.</p>
       </section>
     </main>
 
