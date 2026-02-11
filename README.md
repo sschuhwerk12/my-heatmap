@@ -7,7 +7,6 @@ A lightweight browser app that lets you enter a subject property address and qui
 - Competitive properties (5-mile, ±50% SF) with clear-height/year-built filters
 - Market statistics (vacancy, net absorption, asking rents)
 - Distance to dynamically discovered major routes near the subject
-- Distance to major interstates/routes
 - Auto-generated investment narrative
 
 ## Quick start (fastest way to test)
@@ -65,9 +64,7 @@ Then open <http://localhost:4173>.
 
 ## Notes
 
-- Geocoding is live with fallback providers (OpenStreetMap Nominatim first, Photon fallback).
+- Geocoding is requested through local server proxy endpoints with browser-direct fallback (OpenStreetMap Nominatim first, Photon fallback).
 - Competitive set uses local `Heatmap.json` points as candidate locations and models synthetic property attributes.
-- Major-route proximity is pulled dynamically from OpenStreetMap Overpass API for each analyzed address.
-- Geocoding is live via OpenStreetMap Nominatim.
-- Competitive set uses local `Heatmap.json` points as candidate locations and models synthetic property attributes.
+- Major-route proximity is pulled dynamically from OpenStreetMap Overpass API for each analyzed address (via local proxy with browser-direct fallback).
 - Demographics + market stats are modeled placeholders and should be connected to paid data APIs for production use.

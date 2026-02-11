@@ -31,20 +31,6 @@ const assetTypeProfiles = {
   Office: { vacancyBase: 0.173, rentBase: 34.5, absorptionFactor: 0.85 },
   Retail: { vacancyBase: 0.091, rentBase: 27.9, absorptionFactor: 0.92 },
   Multifamily: { vacancyBase: 0.064, rentBase: 2.45, absorptionFactor: 1.08 }
-const majorRoutes = [
-  { name: 'I-95', lat: 38.7893, lng: -77.1872 },
-  { name: 'I-495 (Capital Beltway)', lat: 38.9093, lng: -77.1327 },
-  { name: 'I-66', lat: 38.8861, lng: -77.2604 },
-  { name: 'US-50', lat: 38.8841, lng: -77.2889 },
-  { name: 'VA-286 (Fairfax County Pkwy)', lat: 38.8047, lng: -77.2946 },
-  { name: 'I-395', lat: 38.8463, lng: -77.0776 }
-];
-
-const assetTypeProfiles = {
-  Industrial: { vacancyBase: 0.051, rentBase: 13.2, absorptionFactor: 1.18, clearHeightBias: 32 },
-  Office: { vacancyBase: 0.173, rentBase: 34.5, absorptionFactor: 0.85, clearHeightBias: 12 },
-  Retail: { vacancyBase: 0.091, rentBase: 27.9, absorptionFactor: 0.92, clearHeightBias: 16 },
-  Multifamily: { vacancyBase: 0.064, rentBase: 2.45, absorptionFactor: 1.08, clearHeightBias: 10 }
 };
 
 function hashCode(text) {
@@ -73,39 +59,16 @@ function haversineMiles(lat1, lng1, lat2, lng2) {
   return metersToMiles(R * c);
 }
 
-async function geocodeWithNominatim(address) {
+async function geocodeDirect(address) {
   const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('q', address);
   url.searchParams.set('format', 'jsonv2');
   url.searchParams.set('limit', '1');
-  url.searchParams.set('addressdetails', '1');
 
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' }
-  });
-
-  if (!res.ok) {
-    throw new Error(`Nominatim failed (${res.status})`);
-async function geocode(address) {
-  const url = new URL('https://nominatim.openstreetmap.org/search');
-  url.searchParams.set('q', address);
-  url.searchParams.set('format', 'json');
-  url.searchParams.set('limit', '1');
-
-  const res = await fetch(url, {
-    headers: {
-      Accept: 'application/json'
-    }
-  });
-
-  if (!res.ok) {
-    throw new Error('Unable to geocode address at this time.');
-  }
-
-  const data = await res.json();
-  if (!data.length) {
-    throw new Error('Nominatim returned no results');
-    throw new Error('No matching location found for that address.');
+  const res = await fetch(url, { headers: { Accept: 'application/json' } });
+  const data = await res.json().catch(() => []);
+  if (!res.ok || !Array.isArray(data) || !data.length) {
+    throw new Error('Direct geocode failed');
   }
 
   return {
@@ -115,45 +78,27 @@ async function geocode(address) {
   };
 }
 
-async function geocodeWithPhoton(address) {
-  const url = new URL('https://photon.komoot.io/api/');
-  url.searchParams.set('q', address);
-  url.searchParams.set('limit', '1');
-
-  const res = await fetch(url, {
-    headers: { Accept: 'application/json' }
-  });
-
-  if (!res.ok) {
-    throw new Error(`Photon failed (${res.status})`);
-  }
-
-  const data = await res.json();
-  const feature = data?.features?.[0];
-  if (!feature) {
-    throw new Error('Photon returned no results');
-  }
-
-  const [lng, lat] = feature.geometry.coordinates;
-  const props = feature.properties || {};
-  const pieces = [props.name, props.city, props.state, props.country].filter(Boolean);
-
-  return {
-    lat: Number(lat),
-    lng: Number(lng),
-    displayName: pieces.join(', ') || address
-  };
-}
-
 async function geocode(address) {
+  const url = new URL('/api/geocode', window.location.origin);
+  url.searchParams.set('q', address);
+
   try {
-    return await geocodeWithNominatim(address);
-  } catch (_) {
-    try {
-      return await geocodeWithPhoton(address);
-    } catch {
-      throw new Error('Unable to locate that address right now. Please try a fuller street/city/state format.');
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' }
+    });
+
+    const payload = await res.json().catch(() => ({}));
+    if (res.ok && payload?.result) {
+      return payload.result;
     }
+  } catch (_) {
+    // fall through to browser-direct geocoding
+  }
+
+  try {
+    return await geocodeDirect(address);
+  } catch {
+    throw new Error('Unable to locate that address right now. Please try a fuller street/city/state format.');
   }
 }
 
@@ -256,7 +201,6 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
   const profile = assetTypeProfiles[assetType];
 
   return rawPoints
-  const candidates = rawPoints
     .map((p, idx) => {
       const distance = haversineMiles(subject.lat, subject.lng, p.lat, p.lng);
       const seed = hashCode(`${idx}|${assetType}`);
@@ -264,7 +208,6 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
       const clearHeight = Math.round(12 + seeded(seed + 99) * 30);
       const yearBuilt = 1970 + Math.round(seeded(seed + 199) * 55);
       const askRent = Number((profile.rentBase * (0.75 + seeded(seed + 299) * 0.5)).toFixed(2));
-      const askRent = (profile.rentBase * (0.75 + seeded(seed + 299) * 0.5)).toFixed(assetType === 'Multifamily' ? 2 : 2);
 
       return {
         id: idx,
@@ -277,7 +220,6 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
         clearHeight,
         yearBuilt,
         askRent
-        askRent: Number(askRent)
       };
     })
     .filter((c) => c.distance <= 5 && c.sf >= minSf && c.sf <= maxSf)
@@ -285,8 +227,6 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
     .filter((c) => c.yearBuilt >= filters.yearBuiltMin && c.yearBuilt <= filters.yearBuiltMax)
     .sort((a, b) => a.distance - b.distance)
     .slice(0, 40);
-
-  return candidates;
 }
 
 function renderComps(comps) {
@@ -371,7 +311,7 @@ function normalizeRouteName(tags) {
   return ref || name || 'Unnamed route';
 }
 
-async function fetchNearbyRoutes(subject, radiusMiles = 20) {
+async function fetchNearbyRoutesDirect(subject, radiusMiles = 20) {
   const query = `
 [out:json][timeout:25];
 (
@@ -389,13 +329,13 @@ out tags center;`;
   });
 
   if (!res.ok) {
-    throw new Error(`Route lookup failed (${res.status})`);
+    throw new Error('Direct route lookup failed');
   }
 
   const data = await res.json();
   const elements = Array.isArray(data.elements) ? data.elements : [];
-
   const deduped = new Map();
+
   elements.forEach((el) => {
     const tags = el.tags || {};
     if (!el.center || !tags.highway) {
@@ -415,6 +355,28 @@ out tags center;`;
   });
 
   return Array.from(deduped.values()).sort((a, b) => a.distance - b.distance).slice(0, 8);
+}
+
+async function fetchNearbyRoutes(subject, radiusMiles = 20) {
+  const url = new URL('/api/routes', window.location.origin);
+  url.searchParams.set('lat', String(subject.lat));
+  url.searchParams.set('lng', String(subject.lng));
+  url.searchParams.set('radiusMiles', String(radiusMiles));
+
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: 'application/json' }
+    });
+
+    const payload = await res.json().catch(() => ({}));
+    if (res.ok && Array.isArray(payload?.routes)) {
+      return payload.routes;
+    }
+  } catch (_) {
+    // fall through to browser-direct route lookup
+  }
+
+  return fetchNearbyRoutesDirect(subject, radiusMiles);
 }
 
 async function renderRouteDistances(subject) {
@@ -442,27 +404,6 @@ function renderSummary({ assetType, demographics, comps, marketStats, routes, su
   const routeSentence = closeRoutes
     ? `Regional access is a major strength, with immediate connectivity to ${closeRoutes}.`
     : 'Regional access appears reasonable, but dynamic route-service data was unavailable for this run.';
-function renderRouteDistances(subject) {
-  const ranked = majorRoutes
-    .map((r) => ({
-      ...r,
-      distance: haversineMiles(subject.lat, subject.lng, r.lat, r.lng)
-    }))
-    .sort((a, b) => a.distance - b.distance);
-
-  routesEl.innerHTML = `<li class="muted">Subject: ${subject.displayName}</li>${ranked
-    .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
-    .join('')}`;
-  routesEl.innerHTML = ranked
-    .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
-    .join('');
-
-  return ranked;
-}
-
-function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF, subject }) {
-function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF }) {
-  const closeRoutes = routes.slice(0, 2).map((r) => r.name).join(' and ');
   const fiveMile = demographics.find((d) => d.ring.includes('5-mile'));
   const incomeSignal = fiveMile.medianIncome > 90000 ? 'strong household purchasing power' : 'moderate household purchasing power';
   const vacancySignal = marketStats.vacancyRate < 0.08 ? 'tight' : marketStats.vacancyRate < 0.14 ? 'balanced' : 'soft';
@@ -479,7 +420,6 @@ function renderSummary({ assetType, demographics, comps, marketStats, routes, su
     </p>
     <p>
       ${routeSentence} This supports tenant retention and future leasing velocity.
-      Regional access is a major strength, with immediate connectivity to ${closeRoutes}. This supports tenant retention and future leasing velocity.
     </p>
     <p>
       Macro commentary: the broader MSA benefits from diversified employment (government, technology, and professional services), ongoing infrastructure
@@ -495,7 +435,6 @@ async function handleSubmit(event) {
   statusEl.textContent = 'Analyzing...';
   submitButtonEl.disabled = true;
   clearOutputPanels();
-  statusEl.textContent = 'Analyzing...';
 
   try {
     const address = document.querySelector('#address').value.trim();
@@ -528,9 +467,6 @@ async function handleSubmit(event) {
     if (requestId !== activeRequestId) {
       return;
     }
-    renderMarketStats(marketStats, assetType);
-
-    const routes = renderRouteDistances(subject);
 
     renderSummary({
       assetType,
@@ -540,7 +476,6 @@ async function handleSubmit(event) {
       routes,
       subjectSF,
       subject
-      subjectSF
     });
 
     statusEl.textContent = `Analysis complete for ${subject.displayName}.`;
@@ -552,7 +487,6 @@ async function handleSubmit(event) {
     if (requestId === activeRequestId) {
       submitButtonEl.disabled = false;
     }
-    statusEl.textContent = error.message;
   }
 }
 
