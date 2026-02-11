@@ -1,0 +1,13 @@
+{
+  "name": "my-heatmap",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Asset Intelligence Workbench prototype",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "dev": "node server.mjs",
+    "check": "node --check app.js",
+    "smoke": "node scripts/smoke-test.mjs"
+  }
+}
