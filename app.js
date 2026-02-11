@@ -26,6 +26,11 @@ const layers = {
   comps: []
 };
 
+const assetTypeProfiles = {
+  Industrial: { vacancyBase: 0.051, rentBase: 13.2, absorptionFactor: 1.18 },
+  Office: { vacancyBase: 0.173, rentBase: 34.5, absorptionFactor: 0.85 },
+  Retail: { vacancyBase: 0.091, rentBase: 27.9, absorptionFactor: 0.92 },
+  Multifamily: { vacancyBase: 0.064, rentBase: 2.45, absorptionFactor: 1.08 }
 const majorRoutes = [
   { name: 'I-95', lat: 38.7893, lng: -77.1872 },
   { name: 'I-495 (Capital Beltway)', lat: 38.9093, lng: -77.1327 },
@@ -68,6 +73,19 @@ function haversineMiles(lat1, lng1, lat2, lng2) {
   return metersToMiles(R * c);
 }
 
+async function geocodeWithNominatim(address) {
+  const url = new URL('https://nominatim.openstreetmap.org/search');
+  url.searchParams.set('q', address);
+  url.searchParams.set('format', 'jsonv2');
+  url.searchParams.set('limit', '1');
+  url.searchParams.set('addressdetails', '1');
+
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error(`Nominatim failed (${res.status})`);
 async function geocode(address) {
   const url = new URL('https://nominatim.openstreetmap.org/search');
   url.searchParams.set('q', address);
@@ -86,6 +104,7 @@ async function geocode(address) {
 
   const data = await res.json();
   if (!data.length) {
+    throw new Error('Nominatim returned no results');
     throw new Error('No matching location found for that address.');
   }
 
@@ -94,6 +113,48 @@ async function geocode(address) {
     lng: Number(data[0].lon),
     displayName: data[0].display_name
   };
+}
+
+async function geocodeWithPhoton(address) {
+  const url = new URL('https://photon.komoot.io/api/');
+  url.searchParams.set('q', address);
+  url.searchParams.set('limit', '1');
+
+  const res = await fetch(url, {
+    headers: { Accept: 'application/json' }
+  });
+
+  if (!res.ok) {
+    throw new Error(`Photon failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  const feature = data?.features?.[0];
+  if (!feature) {
+    throw new Error('Photon returned no results');
+  }
+
+  const [lng, lat] = feature.geometry.coordinates;
+  const props = feature.properties || {};
+  const pieces = [props.name, props.city, props.state, props.country].filter(Boolean);
+
+  return {
+    lat: Number(lat),
+    lng: Number(lng),
+    displayName: pieces.join(', ') || address
+  };
+}
+
+async function geocode(address) {
+  try {
+    return await geocodeWithNominatim(address);
+  } catch (_) {
+    try {
+      return await geocodeWithPhoton(address);
+    } catch {
+      throw new Error('Unable to locate that address right now. Please try a fuller street/city/state format.');
+    }
+  }
 }
 
 async function loadHeatmapPoints() {
@@ -194,6 +255,7 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
   const maxSf = subjectSF * 1.5;
   const profile = assetTypeProfiles[assetType];
 
+  return rawPoints
   const candidates = rawPoints
     .map((p, idx) => {
       const distance = haversineMiles(subject.lat, subject.lng, p.lat, p.lng);
@@ -201,6 +263,7 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
       const sf = Math.round(15000 + seeded(seed) * 110000);
       const clearHeight = Math.round(12 + seeded(seed + 99) * 30);
       const yearBuilt = 1970 + Math.round(seeded(seed + 199) * 55);
+      const askRent = Number((profile.rentBase * (0.75 + seeded(seed + 299) * 0.5)).toFixed(2));
       const askRent = (profile.rentBase * (0.75 + seeded(seed + 299) * 0.5)).toFixed(assetType === 'Multifamily' ? 2 : 2);
 
       return {
@@ -213,6 +276,7 @@ function buildComps(subject, assetType, subjectSF, filters, rawPoints) {
         sf,
         clearHeight,
         yearBuilt,
+        askRent
         askRent: Number(askRent)
       };
     })
@@ -298,6 +362,86 @@ function renderMarketStats(stats, assetType, subject) {
   `;
 }
 
+function normalizeRouteName(tags) {
+  const ref = tags.ref ? tags.ref.trim() : '';
+  const name = tags.name ? tags.name.trim() : '';
+  if (ref && name) {
+    return `${ref} (${name})`;
+  }
+  return ref || name || 'Unnamed route';
+}
+
+async function fetchNearbyRoutes(subject, radiusMiles = 20) {
+  const query = `
+[out:json][timeout:25];
+(
+  way(around:${Math.round(milesToMeters(radiusMiles))},${subject.lat},${subject.lng})[highway~"motorway|trunk|primary"];
+);
+out tags center;`;
+
+  const res = await fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    headers: {
+      Accept: 'application/json',
+      'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8'
+    },
+    body: `data=${encodeURIComponent(query)}`
+  });
+
+  if (!res.ok) {
+    throw new Error(`Route lookup failed (${res.status})`);
+  }
+
+  const data = await res.json();
+  const elements = Array.isArray(data.elements) ? data.elements : [];
+
+  const deduped = new Map();
+  elements.forEach((el) => {
+    const tags = el.tags || {};
+    if (!el.center || !tags.highway) {
+      return;
+    }
+
+    const label = normalizeRouteName(tags);
+    if (label === 'Unnamed route') {
+      return;
+    }
+
+    const distance = haversineMiles(subject.lat, subject.lng, el.center.lat, el.center.lon);
+    const existing = deduped.get(label);
+    if (!existing || distance < existing.distance) {
+      deduped.set(label, { name: label, distance });
+    }
+  });
+
+  return Array.from(deduped.values()).sort((a, b) => a.distance - b.distance).slice(0, 8);
+}
+
+async function renderRouteDistances(subject) {
+  routesEl.innerHTML = '<li class="muted">Looking up nearby major routes...</li>';
+  try {
+    const ranked = await fetchNearbyRoutes(subject, 20);
+    if (!ranked.length) {
+      routesEl.innerHTML = '<li>No major interstates/routes found within 20 miles.</li>';
+      return [];
+    }
+
+    routesEl.innerHTML = `<li class="muted">Subject: ${subject.displayName}</li>${ranked
+      .map((route) => `<li><strong>${route.name}</strong>: ${route.distance.toFixed(2)} miles</li>`)
+      .join('')}`;
+
+    return ranked;
+  } catch {
+    routesEl.innerHTML = '<li>Unable to retrieve nearby routes dynamically right now.</li>';
+    return [];
+  }
+}
+
+function renderSummary({ assetType, demographics, comps, marketStats, routes, subjectSF, subject }) {
+  const closeRoutes = routes.slice(0, 2).map((r) => r.name).join(' and ');
+  const routeSentence = closeRoutes
+    ? `Regional access is a major strength, with immediate connectivity to ${closeRoutes}.`
+    : 'Regional access appears reasonable, but dynamic route-service data was unavailable for this run.';
 function renderRouteDistances(subject) {
   const ranked = majorRoutes
     .map((r) => ({
@@ -334,6 +478,7 @@ function renderSummary({ assetType, demographics, comps, marketStats, routes, su
       with average asking rents around $${marketStats.avgAskingRent.toFixed(2)}.
     </p>
     <p>
+      ${routeSentence} This supports tenant retention and future leasing velocity.
       Regional access is a major strength, with immediate connectivity to ${closeRoutes}. This supports tenant retention and future leasing velocity.
     </p>
     <p>
@@ -378,6 +523,11 @@ async function handleSubmit(event) {
 
     const marketStats = buildMarketStats(comps, assetType);
     renderMarketStats(marketStats, assetType, subject);
+
+    const routes = await renderRouteDistances(subject);
+    if (requestId !== activeRequestId) {
+      return;
+    }
     renderMarketStats(marketStats, assetType);
 
     const routes = renderRouteDistances(subject);
